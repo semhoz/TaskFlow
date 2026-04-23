@@ -1,0 +1,440 @@
+"use client";
+
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  closestCorners,
+  pointerWithin,
+  type DragStartEvent,
+  type DragOverEvent,
+  type DragEndEvent,
+  type CollisionDetection,
+  type UniqueIdentifier,
+  MeasuringStrategy,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { safeGenerateKeyBetween } from "@/lib/position";
+import type {
+  BoardWithColumns,
+  ColumnWithCards,
+  CardWithLabels,
+} from "@/lib/types";
+import { KanbanColumn } from "./kanban-column";
+import { KanbanCard } from "./kanban-card";
+import { NewColumnForm } from "./new-column-form";
+import { CardDetailModal } from "./card-detail-modal";
+import { moveCard } from "@/lib/actions/card-actions";
+import { moveColumn } from "@/lib/actions/column-actions";
+import { toast } from "sonner";
+import { BoardSkeleton } from "./board-skeleton";
+
+type DragType = "card" | "column" | null;
+
+export function BoardView({ board }: { board: BoardWithColumns }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  const [columns, setColumns] = useState<ColumnWithCards[]>(board.columns);
+  const [activeCard, setActiveCard] = useState<CardWithLabels | null>(null);
+  const [activeColumn, setActiveColumn] = useState<ColumnWithCards | null>(null);
+  const [dragType, setDragType] = useState<DragType>(null);
+  const [selectedCard, setSelectedCard] = useState<CardWithLabels | null>(null);
+  const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
+  const prevColumnsRef = useRef<ColumnWithCards[]>(board.columns);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
+  );
+
+  const columnIds = useMemo(() => columns.map((c) => c.id), [columns]);
+
+  // Custom collision detection: when dragging a column, only consider other columns.
+  // When dragging a card, use closestCorners for natural card-to-card feel.
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      if (dragType === "column") {
+        return closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter((c) =>
+            columnIds.includes(c.id as string)
+          ),
+        });
+      }
+
+      // For cards: first try pointerWithin, fallback to closestCorners
+      const pointerCollisions = pointerWithin(args);
+      if (pointerCollisions.length > 0) {
+        return pointerCollisions;
+      }
+      return closestCorners(args);
+    },
+    [dragType, columnIds]
+  );
+
+  function findColumnOfCard(cardId: UniqueIdentifier): ColumnWithCards | undefined {
+    return columns.find((c) => c.cards.some((card) => card.id === cardId));
+  }
+
+  function findCard(id: UniqueIdentifier): CardWithLabels | undefined {
+    for (const col of columns) {
+      const card = col.cards.find((c) => c.id === id);
+      if (card) return card;
+    }
+    return undefined;
+  }
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const { active } = event;
+      prevColumnsRef.current = columns.map((c) => ({
+        ...c,
+        cards: [...c.cards],
+      }));
+
+      // Check if it's a column
+      if (columns.some((c) => c.id === active.id)) {
+        setDragType("column");
+        setActiveColumn(columns.find((c) => c.id === active.id) || null);
+        return;
+      }
+
+      // It's a card
+      const card = findCard(active.id);
+      if (card) {
+        setDragType("card");
+        setActiveCard(card);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columns]
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      // Only handle card cross-column moves here
+      if (dragType !== "card") return;
+
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const activeCol = findColumnOfCard(active.id);
+      if (!activeCol) return;
+
+      // Determine the target column
+      let overCol: ColumnWithCards | undefined;
+      // Is the over target a column itself?
+      const isOverColumn = columns.some((c) => c.id === over.id);
+      if (isOverColumn) {
+        overCol = columns.find((c) => c.id === over.id);
+      } else {
+        overCol = findColumnOfCard(over.id);
+      }
+
+      if (!overCol || activeCol.id === overCol.id) return;
+
+      setColumns((prev) => {
+        const sourceCol = prev.find((c) => c.id === activeCol.id)!;
+        const destCol = prev.find((c) => c.id === overCol.id)!;
+
+        const activeCardIndex = sourceCol.cards.findIndex(
+          (c) => c.id === active.id
+        );
+        if (activeCardIndex === -1) return prev;
+
+        const movedCard = sourceCol.cards[activeCardIndex];
+
+        const overCardIndex = destCol.cards.findIndex(
+          (c) => c.id === over.id
+        );
+        const insertIndex =
+          overCardIndex >= 0 ? overCardIndex : destCol.cards.length;
+
+        return prev.map((col) => {
+          if (col.id === sourceCol.id) {
+            return {
+              ...col,
+              cards: col.cards.filter((c) => c.id !== active.id),
+            };
+          }
+          if (col.id === destCol.id) {
+            const newCards = [...col.cards];
+            newCards.splice(insertIndex, 0, {
+              ...movedCard,
+              column_id: destCol.id,
+            });
+            return { ...col, cards: newCards };
+          }
+          return col;
+        });
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columns, dragType]
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      setActiveCard(null);
+      setActiveColumn(null);
+      setDragType(null);
+
+      if (!over) {
+        setColumns(prevColumnsRef.current);
+        return;
+      }
+
+      // ── Column reorder ──
+      if (columns.some((c) => c.id === active.id)) {
+        if (active.id === over.id) return;
+
+        const oldIndex = columns.findIndex((c) => c.id === active.id);
+        const newIndex = columns.findIndex((c) => c.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return;
+
+        const reordered = arrayMove(columns, oldIndex, newIndex);
+
+        const prevPos = newIndex > 0 ? reordered[newIndex - 1].position : null;
+        const nextPos =
+          newIndex < reordered.length - 1
+            ? reordered[newIndex + 1].position
+            : null;
+
+        const newPos = safeGenerateKeyBetween(prevPos, nextPos);
+        reordered[newIndex] = { ...reordered[newIndex], position: newPos };
+
+        setColumns(reordered);
+
+        moveColumn(active.id as string, board.id, prevPos, nextPos).then(
+          (result) => {
+            if (result.error) {
+              toast.error("Failed to move column");
+              setColumns(prevColumnsRef.current);
+            }
+          }
+        );
+        return;
+      }
+
+      // ── Card reorder / cross-column move ──
+      const finalColumns = columns.map((c) => ({
+        ...c,
+        cards: [...c.cards],
+      }));
+
+      const destCol = finalColumns.find((c) =>
+        c.cards.some((card) => card.id === active.id)
+      );
+      if (!destCol) return;
+
+      const cardIndex = destCol.cards.findIndex((c) => c.id === active.id);
+      if (cardIndex === -1) return;
+
+      // Same-column reorder: if over is a different card in same column
+      if (active.id !== over.id) {
+        const overCardIndex = destCol.cards.findIndex(
+          (c) => c.id === over.id
+        );
+        if (overCardIndex >= 0 && overCardIndex !== cardIndex) {
+          const [moved] = destCol.cards.splice(cardIndex, 1);
+          destCol.cards.splice(overCardIndex, 0, moved);
+        }
+      }
+
+      // Compute new position from neighbors
+      const finalIndex = destCol.cards.findIndex((c) => c.id === active.id);
+      const prevPos =
+        finalIndex > 0 ? destCol.cards[finalIndex - 1].position : null;
+      const nextPos =
+        finalIndex < destCol.cards.length - 1
+          ? destCol.cards[finalIndex + 1].position
+          : null;
+
+      const newPos = safeGenerateKeyBetween(prevPos, nextPos);
+      destCol.cards[finalIndex] = {
+        ...destCol.cards[finalIndex],
+        position: newPos,
+        column_id: destCol.id,
+      };
+
+      setColumns(finalColumns);
+
+      moveCard(
+        active.id as string,
+        destCol.id,
+        board.id,
+        prevPos,
+        nextPos
+      ).then((result) => {
+        if (result.error) {
+          toast.error("Failed to move card");
+          setColumns(prevColumnsRef.current);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [columns, board.id]
+  );
+
+  const handleColumnCreated = useCallback(
+    (newColumn: ColumnWithCards) => {
+      setColumns((prev) => [...prev, newColumn]);
+    },
+    []
+  );
+
+  const handleColumnDeleted = useCallback((columnId: string) => {
+    setColumns((prev) => prev.filter((c) => c.id !== columnId));
+  }, []);
+
+  const handleColumnRenamed = useCallback(
+    (columnId: string, newTitle: string) => {
+      setColumns((prev) =>
+        prev.map((c) => (c.id === columnId ? { ...c, title: newTitle } : c))
+      );
+    },
+    []
+  );
+
+  const handleCardCreated = useCallback(
+    (columnId: string, card: CardWithLabels) => {
+      setColumns((prev) =>
+        prev.map((c) =>
+          c.id === columnId ? { ...c, cards: [...c.cards, card] } : c
+        )
+      );
+    },
+    []
+  );
+
+  const handleCardClick = useCallback(
+    (card: CardWithLabels, columnId: string) => {
+      setSelectedCard(card);
+      setSelectedColumnId(columnId);
+    },
+    []
+  );
+
+  const handleCardUpdated = useCallback(
+    (updatedCard: CardWithLabels) => {
+      setColumns((prev) =>
+        prev.map((col) => ({
+          ...col,
+          cards: col.cards.map((c) =>
+            c.id === updatedCard.id ? updatedCard : c
+          ),
+        }))
+      );
+      setSelectedCard(updatedCard);
+    },
+    []
+  );
+
+  const handleCardDeleted = useCallback((cardId: string) => {
+    setColumns((prev) =>
+      prev.map((col) => ({
+        ...col,
+        cards: col.cards.filter((c) => c.id !== cardId),
+      }))
+    );
+    setSelectedCard(null);
+    setSelectedColumnId(null);
+  }, []);
+
+  if (!mounted) {
+    return <BoardSkeleton />;
+  }
+
+  return (
+    <>
+      <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 md:p-6">
+        <DndContext
+          id="board-dnd"
+          sensors={sensors}
+          collisionDetection={collisionDetection}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          measuring={{
+            droppable: { strategy: MeasuringStrategy.Always },
+          }}
+        >
+          <SortableContext
+            items={columnIds}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="flex h-full gap-4">
+              {columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  boardId={board.id}
+                  onCardCreated={handleCardCreated}
+                  onCardClick={handleCardClick}
+                  onColumnDeleted={handleColumnDeleted}
+                  onColumnRenamed={handleColumnRenamed}
+                />
+              ))}
+              <NewColumnForm
+                boardId={board.id}
+                onColumnCreated={handleColumnCreated}
+              />
+            </div>
+          </SortableContext>
+
+          <DragOverlay dropAnimation={null}>
+            {activeCard && (
+              <div className="rotate-3 opacity-90">
+                <KanbanCard card={activeCard} isOverlay />
+              </div>
+            )}
+            {activeColumn && (
+              <div className="rotate-2 opacity-80">
+                <div className="w-72 rounded-xl border bg-muted/50 p-3 shadow-xl">
+                  <h3 className="text-sm font-semibold">
+                    {activeColumn.title}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {activeColumn.cards.length} cards
+                  </p>
+                </div>
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
+      </div>
+
+      {selectedCard && selectedColumnId && (
+        <CardDetailModal
+          card={selectedCard}
+          boardId={board.id}
+          labels={board.labels}
+          onClose={() => {
+            setSelectedCard(null);
+            setSelectedColumnId(null);
+          }}
+          onCardUpdated={handleCardUpdated}
+          onCardDeleted={handleCardDeleted}
+        />
+      )}
+    </>
+  );
+}
