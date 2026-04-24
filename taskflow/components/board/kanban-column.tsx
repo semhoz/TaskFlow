@@ -151,7 +151,7 @@ export function KanbanColumn({
         </DropdownMenu>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-2">
+      <div className="flex min-h-0 flex-1 touch-pan-y flex-col gap-2 overflow-y-auto overscroll-y-contain px-3 pb-2 [-webkit-overflow-scrolling:touch]">
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
           {column.cards.map((card) => (
             <KanbanCard

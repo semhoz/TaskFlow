@@ -44,7 +44,7 @@ export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={`cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md ${
+      className={`cursor-pointer touch-manipulation select-none rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md ${
         isDragging ? "pointer-events-none" : ""
       } ${isOverlay ? "shadow-xl" : ""}`}
     >

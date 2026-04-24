@@ -5,7 +5,6 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
-  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -39,9 +38,16 @@ import { BoardSkeleton } from "./board-skeleton";
 
 export function BoardView({ board }: { board: BoardWithColumns }) {
   const [mounted, setMounted] = useState(false);
+  /** Touch-primary devices: delay activation so vertical/horizontal scroll can win; avoid stacking TouchSensor + PointerSensor (double handling on mobile). */
+  const [touchPrimary, setTouchPrimary] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const sync = () => setTouchPrimary(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
   const [columns, setColumns] = useState<ColumnWithCards[]>(board.columns);
   const [activeCard, setActiveCard] = useState<CardWithLabels | null>(null);
@@ -52,10 +58,9 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
+      activationConstraint: touchPrimary
+        ? { delay: 200, tolerance: 12 }
+        : { distance: 8 },
     })
   );
 
@@ -357,7 +362,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   return (
     <>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 md:p-6">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x p-4 md:p-6">
         <DndContext
           id="board-dnd"
           sensors={sensors}
@@ -367,6 +372,13 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
           onDragEnd={handleDragEnd}
           measuring={{
             droppable: { strategy: MeasuringStrategy.Always },
+          }}
+          autoScroll={{
+            acceleration: 10,
+            threshold: {
+              x: 0.12,
+              y: 0.12,
+            },
           }}
         >
           <SortableContext
