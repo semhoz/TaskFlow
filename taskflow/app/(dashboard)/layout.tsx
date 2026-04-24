@@ -49,7 +49,7 @@ export default async function DashboardLayout({
           </div>
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
     </div>
   );
 }

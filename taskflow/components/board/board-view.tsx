@@ -59,7 +59,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: touchPrimary
-        ? { delay: 200, tolerance: 12 }
+        ? { delay: 350, tolerance: 16 }
         : { distance: 8 },
     })
   );
@@ -362,7 +362,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   return (
     <>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x p-4 md:p-6">
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto overscroll-contain p-4 md:overflow-y-hidden md:p-6">
         <DndContext
           id="board-dnd"
           sensors={sensors}
@@ -385,12 +385,13 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
             items={columnIds}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex h-full gap-4">
+            <div className="flex h-auto gap-4 max-md:items-start md:h-full md:items-stretch">
               {columns.map((column) => (
                 <KanbanColumn
                   key={column.id}
                   column={column}
                   boardId={board.id}
+                  touchDragHandle={touchPrimary}
                   onCardCreated={handleCardCreated}
                   onCardClick={handleCardClick}
                   onColumnDeleted={handleColumnDeleted}

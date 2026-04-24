@@ -22,6 +22,8 @@ import { toast } from "sonner";
 interface KanbanColumnProps {
   column: ColumnWithCards;
   boardId: string;
+  /** Touch devices: drag cards only from handle so scrolling/swiping between columns stays clean */
+  touchDragHandle?: boolean;
   onCardCreated: (columnId: string, card: CardWithLabels) => void;
   onCardClick: (card: CardWithLabels, columnId: string) => void;
   onColumnDeleted: (columnId: string) => void;
@@ -31,6 +33,7 @@ interface KanbanColumnProps {
 export function KanbanColumn({
   column,
   boardId,
+  touchDragHandle = false,
   onCardCreated,
   onCardClick,
   onColumnDeleted,
@@ -157,6 +160,7 @@ export function KanbanColumn({
             <KanbanCard
               key={card.id}
               card={card}
+              dragHandleOnly={touchDragHandle}
               onClick={() => onCardClick(card, column.id)}
             />
           ))}

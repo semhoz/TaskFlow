@@ -4,16 +4,23 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { CardWithLabels } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, User } from "lucide-react";
+import { Calendar, GripVertical, User } from "lucide-react";
 import { format, isPast, isToday } from "date-fns";
 
 interface KanbanCardProps {
   card: CardWithLabels;
+  /** When true (typically mobile), only the grip starts a drag so the rest of the card scrolls normally */
+  dragHandleOnly?: boolean;
   onClick?: () => void;
   isOverlay?: boolean;
 }
 
-export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
+export function KanbanCard({
+  card,
+  dragHandleOnly = false,
+  onClick,
+  isOverlay,
+}: KanbanCardProps) {
   const {
     attributes,
     listeners,
@@ -30,24 +37,16 @@ export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    // Hide source while dragging so only DragOverlay is visible; avoids wrong "which card moved" feel.
     opacity: isDragging ? 0 : 1,
   };
 
   const dueDateObj = card.due_date ? new Date(card.due_date) : null;
   const isOverdue = dueDateObj && isPast(dueDateObj) && !isToday(dueDateObj);
 
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      onClick={onClick}
-      className={`cursor-pointer touch-manipulation select-none rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md ${
-        isDragging ? "pointer-events-none" : ""
-      } ${isOverlay ? "shadow-xl" : ""}`}
-    >
+  const showHandle = dragHandleOnly && !isOverlay;
+
+  const content = (
+    <>
       {card.labels.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
           {card.labels.map((label) => (
@@ -86,6 +85,48 @@ export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
           </Badge>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...(showHandle ? {} : listeners)}
+      onClick={showHandle ? undefined : onClick}
+      className={`rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md ${
+        showHandle ? "cursor-default" : "cursor-pointer touch-manipulation select-none"
+      } ${isDragging ? "pointer-events-none" : ""} ${isOverlay ? "shadow-xl" : ""}`}
+    >
+      {showHandle ? (
+        <div className="flex gap-1">
+          <button
+            type="button"
+            className="touch-none -m-1 shrink-0 cursor-grab rounded p-1 text-muted-foreground hover:bg-muted/80 active:cursor-grabbing"
+            {...listeners}
+            aria-label="Kartı taşı"
+          >
+            <GripVertical className="size-4" />
+          </button>
+          <div
+            className="min-w-0 flex-1 cursor-pointer touch-manipulation select-none"
+            onClick={onClick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick?.();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+          >
+            {content}
+          </div>
+        </div>
+      ) : (
+        content
+      )}
     </div>
   );
 }
