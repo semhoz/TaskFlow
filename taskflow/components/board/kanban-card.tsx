@@ -103,11 +103,11 @@ export function KanbanCard({
         <div className="flex gap-1">
           <button
             type="button"
-            className="touch-none -m-1 shrink-0 cursor-grab rounded p-1 text-muted-foreground hover:bg-muted/80 active:cursor-grabbing"
+            className="touch-none -m-1 flex size-11 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted/80 active:cursor-grabbing"
             {...listeners}
             aria-label="Kartı taşı"
           >
-            <GripVertical className="size-4" />
+            <GripVertical className="size-5" />
           </button>
           <div
             className="min-w-0 flex-1 cursor-pointer touch-manipulation select-none"

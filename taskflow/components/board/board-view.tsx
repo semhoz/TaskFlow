@@ -4,7 +4,8 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -38,7 +39,7 @@ import { BoardSkeleton } from "./board-skeleton";
 
 export function BoardView({ board }: { board: BoardWithColumns }) {
   const [mounted, setMounted] = useState(false);
-  /** Touch-primary devices: delay activation so vertical/horizontal scroll can win; avoid stacking TouchSensor + PointerSensor (double handling on mobile). */
+  /** Touch-primary: card uses drag handle + TouchSensor long-press; avoids PointerSensor firing too eagerly on finger drags. */
   const [touchPrimary, setTouchPrimary] = useState(false);
 
   useEffect(() => {
@@ -57,10 +58,11 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
   const prevColumnsRef = useRef<ColumnWithCards[]>(board.columns);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: touchPrimary
-        ? { delay: 350, tolerance: 16 }
-        : { distance: 8 },
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 12 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 520, tolerance: 22 },
     })
   );
 
