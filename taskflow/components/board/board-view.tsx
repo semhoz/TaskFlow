@@ -364,7 +364,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   return (
     <>
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto overscroll-contain p-4 max-md:[-webkit-overflow-scrolling:touch] md:overflow-y-hidden md:p-6">
+      <div className="min-h-0 overflow-x-auto overscroll-x-contain p-4 max-md:flex-none max-md:overflow-y-visible md:flex-1 md:overflow-y-hidden md:overscroll-contain md:p-6">
         <DndContext
           id="board-dnd"
           sensors={sensors}
