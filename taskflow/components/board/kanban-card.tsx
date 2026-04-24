@@ -30,7 +30,8 @@ export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.4 : 1,
+    // Hide source while dragging so only DragOverlay is visible; avoids wrong "which card moved" feel.
+    opacity: isDragging ? 0 : 1,
   };
 
   const dueDateObj = card.due_date ? new Date(card.due_date) : null;
@@ -44,7 +45,7 @@ export function KanbanCard({ card, onClick, isOverlay }: KanbanCardProps) {
       {...listeners}
       onClick={onClick}
       className={`cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md ${
-        isDragging ? "shadow-lg ring-2 ring-primary/20" : ""
+        isDragging ? "pointer-events-none" : ""
       } ${isOverlay ? "shadow-xl" : ""}`}
     >
       {card.labels.length > 0 && (

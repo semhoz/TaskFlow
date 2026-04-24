@@ -10,7 +10,6 @@ import {
   useSensors,
   closestCenter,
   closestCorners,
-  pointerWithin,
   type DragStartEvent,
   type DragOverEvent,
   type DragEndEvent,
@@ -38,8 +37,6 @@ import { moveColumn } from "@/lib/actions/column-actions";
 import { toast } from "sonner";
 import { BoardSkeleton } from "./board-skeleton";
 
-type DragType = "card" | "column" | null;
-
 export function BoardView({ board }: { board: BoardWithColumns }) {
   const [mounted, setMounted] = useState(false);
 
@@ -49,7 +46,6 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
   const [columns, setColumns] = useState<ColumnWithCards[]>(board.columns);
   const [activeCard, setActiveCard] = useState<CardWithLabels | null>(null);
   const [activeColumn, setActiveColumn] = useState<ColumnWithCards | null>(null);
-  const [dragType, setDragType] = useState<DragType>(null);
   const [selectedCard, setSelectedCard] = useState<CardWithLabels | null>(null);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const prevColumnsRef = useRef<ColumnWithCards[]>(board.columns);
@@ -65,11 +61,13 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   const columnIds = useMemo(() => columns.map((c) => c.id), [columns]);
 
-  // Custom collision detection: when dragging a column, only consider other columns.
-  // When dragging a card, use closestCorners for natural card-to-card feel.
+  // Derive column vs card drag from active id so collision detection is correct on frame 1.
+  // For cards, closestCorners tracks vertical reordering; pointerWithin often keeps "over"
+  // on the top card while the pointer is still inside its tall hit box.
   const collisionDetection: CollisionDetection = useCallback(
     (args) => {
-      if (dragType === "column") {
+      const activeId = args.active.id as string;
+      if (columnIds.includes(activeId)) {
         return closestCenter({
           ...args,
           droppableContainers: args.droppableContainers.filter((c) =>
@@ -78,14 +76,9 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
         });
       }
 
-      // For cards: first try pointerWithin, fallback to closestCorners
-      const pointerCollisions = pointerWithin(args);
-      if (pointerCollisions.length > 0) {
-        return pointerCollisions;
-      }
       return closestCorners(args);
     },
-    [dragType, columnIds]
+    [columnIds]
   );
 
   function findColumnOfCard(cardId: UniqueIdentifier): ColumnWithCards | undefined {
@@ -110,7 +103,6 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
       // Check if it's a column
       if (columns.some((c) => c.id === active.id)) {
-        setDragType("column");
         setActiveColumn(columns.find((c) => c.id === active.id) || null);
         return;
       }
@@ -118,7 +110,6 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
       // It's a card
       const card = findCard(active.id);
       if (card) {
-        setDragType("card");
         setActiveCard(card);
       }
     },
@@ -128,8 +119,8 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
-      // Only handle card cross-column moves here
-      if (dragType !== "card") return;
+      // Column drags: only handled in onDragEnd. Card drags: active id is never a column id.
+      if (columns.some((c) => c.id === event.active.id)) return;
 
       const { active, over } = event;
       if (!over || active.id === over.id) return;
@@ -186,7 +177,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [columns, dragType]
+    [columns]
   );
 
   const handleDragEnd = useCallback(
@@ -195,7 +186,6 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
       setActiveCard(null);
       setActiveColumn(null);
-      setDragType(null);
 
       if (!over) {
         setColumns(prevColumnsRef.current);
@@ -321,6 +311,8 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
           c.id === columnId ? { ...c, cards: [...c.cards, card] } : c
         )
       );
+      setSelectedCard(card);
+      setSelectedColumnId(columnId);
     },
     []
   );
