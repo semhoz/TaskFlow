@@ -154,8 +154,8 @@ export function KanbanColumn({
         </DropdownMenu>
       </div>
 
-      {/* md+: sütun içi kaydırma. Mobil: tek dikey kaydırma tahta sarmalayıcıda — kartların üstünde de sayfa kayar */}
-      <div className="flex flex-col gap-2 px-3 pb-2 md:min-h-0 md:flex-1 md:touch-pan-y md:overflow-y-auto md:overscroll-y-contain md:[-webkit-overflow-scrolling:touch]">
+      {/* Dikey kaydırma: sayfa (main) — iç içe scroll yok; mobil + masaüstü */}
+      <div className="flex flex-col gap-2 px-3 pb-2">
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
           {column.cards.map((card) => (
             <KanbanCard

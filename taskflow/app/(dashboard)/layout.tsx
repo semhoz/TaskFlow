@@ -49,7 +49,7 @@ export default async function DashboardLayout({
           </div>
         </div>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto max-md:[-webkit-overflow-scrolling:touch] md:overflow-y-visible">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto [-webkit-overflow-scrolling:touch]">
         {children}
       </main>
     </div>

@@ -364,7 +364,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
 
   return (
     <>
-      <div className="min-h-0 overflow-x-auto overscroll-x-contain p-4 max-md:flex-none max-md:overflow-y-visible md:flex-1 md:overflow-y-hidden md:overscroll-contain md:p-6">
+      <div className="min-h-0 overflow-x-auto overscroll-x-contain p-4 max-md:flex-none max-md:overflow-y-visible md:flex-none md:overflow-y-visible md:p-6">
         <DndContext
           id="board-dnd"
           sensors={sensors}
@@ -387,7 +387,7 @@ export function BoardView({ board }: { board: BoardWithColumns }) {
             items={columnIds}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="flex h-auto gap-4 max-md:items-start md:h-full md:items-stretch">
+            <div className="flex h-auto items-start gap-4">
               {columns.map((column) => (
                 <KanbanColumn
                   key={column.id}
