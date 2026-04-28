@@ -48,6 +48,32 @@ export async function signUp(formData: FormData) {
     } else if (exists === true) {
       return { error: SIGN_UP_EMAIL_TAKEN, duplicateEmail: true };
     }
+
+    // Doğrudan onaylı kullanıcı oluştur; onay e-postası gönderilmez.
+    const { error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName },
+    });
+
+    if (createError) {
+      const mapped = mapSignUpError(createError as AuthError);
+      return mapped === SIGN_UP_EMAIL_TAKEN
+        ? { error: mapped, duplicateEmail: true }
+        : { error: mapped };
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      return { error: signInError.message };
+    }
+
+    redirect("/dashboard");
   }
 
   const { data, error } = await supabase.auth.signUp({
