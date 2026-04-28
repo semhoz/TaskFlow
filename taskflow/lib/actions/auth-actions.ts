@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 
@@ -32,6 +33,19 @@ export async function signUp(formData: FormData) {
     return { error: "E-posta ve şifre gerekli." };
   }
 
+  const admin = getAdminClient();
+  if (admin) {
+    const { data: exists, error: rpcError } = await admin.rpc(
+      "auth_email_exists",
+      { email_input: email }
+    );
+    if (rpcError) {
+      console.error("auth_email_exists RPC:", rpcError.message);
+    } else if (exists === true) {
+      return { error: "Bu e-posta adresi zaten kayıtlı." };
+    }
+  }
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -44,17 +58,18 @@ export async function signUp(formData: FormData) {
     return { error: mapSignUpError(error) };
   }
 
-  // Confirm e-mail açıksa Supabase, e-posta sızdırmayı önlemek için bazen hata döndürmeden
-  // identities dizisi boş bir user döner (sıfırdan kayıtta en az bir kimlik olmalı).
-  if (data.user?.identities?.length === 0) {
+  if (!data.user) {
+    return { error: "Kayıt tamamlanamadı. Lütfen tekrar deneyin." };
+  }
+
+  // Confirm e-mail açıksa Supabase bazen hata vermeden "sahte" kullanıcı döner;
+  // yeni kayıtta en az bir identity olmalı (boş/eksik = mevcut e-posta veya obfuscation).
+  const identities = data.user.identities;
+  if (!identities?.length) {
     return {
       error:
         "Bu e-posta adresi zaten kayıtlı veya onay bekliyor. Giriş yapmayı deneyin.",
     };
-  }
-
-  if (!data.user) {
-    return { error: "Kayıt tamamlanamadı. Lütfen tekrar deneyin." };
   }
 
   redirect("/dashboard");
