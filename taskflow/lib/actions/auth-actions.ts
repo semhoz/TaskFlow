@@ -12,33 +12,26 @@ const SIGN_UP_EMAIL_TAKEN =
 const SIGN_UP_NEEDS_SERVICE_ROLE =
   "Kayıt için sunucuda SUPABASE_SERVICE_ROLE_KEY tanımlı olmalı. .env veya barındırma (ör. Vercel) ortam değişkenlerine ekleyin.";
 
+function formatAuthError(error: AuthError): string {
+  if (
+    error.code === "over_email_send_rate_limit" ||
+    error.message.toLowerCase().includes("email rate limit")
+  ) {
+    return (
+      "E-posta gönderim kotası doldu (Supabase sınırı). Bir süre sonra tekrar deneyin. " +
+      "Geliştirme için: Supabase → Authentication → Providers → Email → Confirm email kapatın; " +
+      "üretimde özel SMTP veya daha yüksek kota kullanın."
+    );
+  }
+  return error.message;
+}
+
 function isEmailNotConfirmedError(error: AuthError): boolean {
   if (error.code === "email_not_confirmed") return true;
   return error.message.toLowerCase().includes("email not confirmed");
 }
 
-/** Admin listUsers ile e-postaya göre kullanıcı id (küçük projeler için yeterli). */
-async function findAuthUserIdByEmail(
-  admin: SupabaseClient,
-  email: string
-): Promise<string | null> {
-  const target = email.trim().toLowerCase();
-  let page = 1;
-  const perPage = 1000;
-  for (let i = 0; i < 50; i++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-    if (error || !data?.users) return null;
-    const hit = data.users.find(
-      (u) => (u.email ?? "").trim().toLowerCase() === target
-    );
-    if (hit) return hit.id;
-    if (data.users.length < perPage) return null;
-    page += 1;
-  }
-  return null;
-}
-
-/** Şifre doğru ama e-posta onaysızsa (veya eski kayıtlar) service role ile onaylayıp tekrar dener. */
+/** Onaysız hesap: GoTrue admin (updateUser) e-posta kotasına yol açabilir; RPC yalnızca DB günceller. */
 async function signInWithOptionalEmailConfirm(
   supabase: SupabaseClient,
   admin: SupabaseClient | null,
@@ -51,14 +44,11 @@ async function signInWithOptionalEmailConfirm(
     return { error };
   }
 
-  const userId = await findAuthUserIdByEmail(admin, email);
-  if (!userId) return { error };
-
-  const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
-    email_confirm: true,
+  const { error: rpcError } = await admin.rpc("auth_mark_email_confirmed", {
+    email_input: email,
   });
-  if (updateError) {
-    console.error("updateUserById email_confirm:", updateError.message);
+  if (rpcError) {
+    console.error("auth_mark_email_confirmed:", rpcError.message);
     return { error };
   }
 
@@ -119,20 +109,20 @@ export async function signUp(formData: FormData) {
     });
 
   if (createError) {
-    const mapped = mapSignUpError(createError as AuthError);
+    const e = createError as AuthError;
+    const mapped = mapSignUpError(e);
     return mapped === SIGN_UP_EMAIL_TAKEN
       ? { error: mapped, duplicateEmail: true }
-      : { error: mapped };
+      : { error: formatAuthError(e) };
   }
 
   const newUser = created.user;
   if (newUser?.id && !newUser.email_confirmed_at) {
-    const { error: confirmError } = await admin.auth.admin.updateUserById(
-      newUser.id,
-      { email_confirm: true }
-    );
-    if (confirmError) {
-      console.error("Kayıt sonrası e-posta onayı:", confirmError.message);
+    const { error: rpcError } = await admin.rpc("auth_mark_email_confirmed", {
+      email_input: email,
+    });
+    if (rpcError) {
+      console.error("Kayıt sonrası e-posta onayı (RPC):", rpcError.message);
     }
   }
 
@@ -144,7 +134,7 @@ export async function signUp(formData: FormData) {
   );
 
   if (signInError) {
-    return { error: signInError.message };
+    return { error: formatAuthError(signInError) };
   }
 
   redirect("/dashboard");
@@ -165,7 +155,7 @@ export async function signIn(formData: FormData) {
   );
 
   if (error) {
-    return { error: error.message };
+    return { error: formatAuthError(error) };
   }
 
   redirect("/dashboard");
