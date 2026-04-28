@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { AuthThemeCorner } from "@/components/auth-theme-corner";
 
 export default async function AuthLayout({
   children,
@@ -15,5 +16,10 @@ export default async function AuthLayout({
     redirect("/dashboard");
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <AuthThemeCorner />
+      {children}
+    </>
+  );
 }
