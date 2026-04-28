@@ -10,14 +10,17 @@ import { Loader2, LayoutDashboard } from "lucide-react";
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
+  const [duplicateEmail, setDuplicateEmail] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(formData: FormData) {
     setLoading(true);
     setError(null);
+    setDuplicateEmail(false);
     const result = await signUp(formData);
     if (result?.error) {
       setError(result.error);
+      setDuplicateEmail(result.duplicateEmail === true);
       setLoading(false);
     }
   }
@@ -35,8 +38,23 @@ export default function RegisterPage() {
 
         <form action={handleSubmit} className="space-y-4">
           {error && (
-            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
+            <div
+              role="alert"
+              className={
+                duplicateEmail
+                  ? "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-sm text-amber-950 dark:text-amber-100"
+                  : "rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              }
+            >
+              <p>{error}</p>
+              {duplicateEmail && (
+                <Link
+                  href="/login"
+                  className="mt-2 inline-block font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Giriş sayfasına git →
+                </Link>
+              )}
             </div>
           )}
 

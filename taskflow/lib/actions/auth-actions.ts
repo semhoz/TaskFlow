@@ -5,6 +5,10 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 
+/** Mevcut e-posta ile kayıt denemesi — oturum da açılmaz; kullanıcıya açıkça söylenir. */
+const SIGN_UP_EMAIL_TAKEN =
+  "Bu adrese yeni kayıt oluşturulmadı ve oturum açılmadı; bu e-posta zaten kayıtlı. Şifrenizle giriş yapmayı deneyin.";
+
 function mapSignUpError(error: AuthError): string {
   const code = error.code ?? "";
   const msg = error.message.toLowerCase();
@@ -15,7 +19,7 @@ function mapSignUpError(error: AuthError): string {
     msg.includes("user already registered") ||
     msg.includes("email address is already")
   ) {
-    return "Bu e-posta adresi zaten kayıtlı.";
+    return SIGN_UP_EMAIL_TAKEN;
   }
 
   return error.message;
@@ -42,7 +46,7 @@ export async function signUp(formData: FormData) {
     if (rpcError) {
       console.error("auth_email_exists RPC:", rpcError.message);
     } else if (exists === true) {
-      return { error: "Bu e-posta adresi zaten kayıtlı." };
+      return { error: SIGN_UP_EMAIL_TAKEN, duplicateEmail: true };
     }
   }
 
@@ -55,7 +59,10 @@ export async function signUp(formData: FormData) {
   });
 
   if (error) {
-    return { error: mapSignUpError(error) };
+    const mapped = mapSignUpError(error);
+    return mapped === SIGN_UP_EMAIL_TAKEN
+      ? { error: mapped, duplicateEmail: true }
+      : { error: mapped };
   }
 
   if (!data.user) {
@@ -67,8 +74,8 @@ export async function signUp(formData: FormData) {
   const identities = data.user.identities;
   if (!identities?.length) {
     return {
-      error:
-        "Bu e-posta adresi zaten kayıtlı veya onay bekliyor. Giriş yapmayı deneyin.",
+      error: SIGN_UP_EMAIL_TAKEN,
+      duplicateEmail: true,
     };
   }
 
